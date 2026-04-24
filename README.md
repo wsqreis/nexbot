@@ -33,6 +33,10 @@
 - Vite dev/preview middleware exposes `/api/chat` handled by [vite.api.js](vite.api.js).
 - Server forwards requests to the OpenAI Responses API when `OPENAI_API_KEY` is present.
 - If `OPENAI_API_KEY` is missing, the endpoint returns an explanatory 503 error to avoid leaking keys client-side.
+ - Vite dev/preview middleware exposes `/api/chat` handled by [vite.api.js](vite.api.js) (this project also includes a simple serverless `api/chat.js`).
+ - The API will honor a `model` parameter sent by the widget or client (via the widget's `data-model` attribute or request body). If no model is provided the server falls back to `DEFAULT_MODEL` or `gpt-4.1-mini`.
+ - Server forwards requests to the OpenAI Responses API when `OPENAI_API_KEY` is present.
+ - If `OPENAI_API_KEY` is missing, the endpoint returns an explanatory 503 error to avoid leaking keys client-side.
 
 ---
 
@@ -160,6 +164,8 @@ nexbot/
 │   │   └── GTMPanel.jsx       # Tag simulator + event log
 │   ├── App.jsx
 │   └── main.jsx
+├── api/
+│   ├── chat.js                # Vercel serverless API route for chatbot requests
 ├── vite.api.js                # Vite middleware for /api/chat -> OpenAI Responses
 ├── package.json
 └── README.md
