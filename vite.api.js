@@ -1,3 +1,7 @@
+import authLogin from './api/auth/login.js';
+import authRegister from './api/auth/register.js';
+import authMe from './api/auth/me.js';
+
 const DEFAULT_MODEL = 'gpt-4.1-mini';
 
 function setCors(res) {
@@ -149,6 +153,21 @@ async function handleChat(req, res) {
 function apiMiddleware(req, res, next) {
   if (req.url === '/api/chat') {
     handleChat(req, res);
+    return;
+  }
+
+  if (req.url === '/api/auth/login') {
+    authLogin(req, res);
+    return;
+  }
+
+  if (req.url === '/api/auth/register') {
+    authRegister(req, res);
+    return;
+  }
+
+  if (req.url === '/api/auth/me') {
+    authMe(req, res);
     return;
   }
 

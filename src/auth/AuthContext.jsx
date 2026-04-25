@@ -2,56 +2,32 @@ import { createContext, useContext, useState } from 'react';
 
 const AuthContext = createContext(null);
 
-// Simulates JWT encode/decode (in production, this comes from the server)
-function createJWT(payload) {
-  const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const body   = btoa(JSON.stringify({ ...payload, iat: Date.now(), exp: Date.now() + 3600_000 }));
-  const sig    = btoa('nexbot-secret-' + payload.email);
-  return `${header}.${body}.${sig}`;
-}
+const TOKEN_KEY = 'nexbot_auth_token';
 
 function decodeJWT(token) {
   try {
-    const [, body] = token.split('.');
-    return JSON.parse(atob(body));
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const str = atob(b64);
+    try {
+      // handle utf8 properly
+      return JSON.parse(decodeURIComponent(escape(str)));
+    } catch {
+      return JSON.parse(str);
+    }
   } catch {
     return null;
   }
 }
 
-// Mocked user store
-const USERS_KEY = 'nexbot_users';
-const TOKEN_KEY = 'nexbot_auth_token';
-const DEMO_USER = {
-  name: 'Demo User',
-  email: 'demo@nexbot.io',
-  password: btoa('demo1234'),
-  role: 'admin',
-};
-
-function getUsers() {
-  const storedUsers = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
-  const hasDemoUser = storedUsers.some(user => user.email === DEMO_USER.email);
-
-  if (hasDemoUser) return storedUsers;
-
-  const users = [...storedUsers, DEMO_USER];
-  saveUsers(users);
-  return users;
-}
-function saveUsers(users) {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
-}
-
 function getStoredUser() {
   const token = localStorage.getItem(TOKEN_KEY);
   if (!token) return null;
-
   const payload = decodeJWT(token);
-  if (payload && payload.exp > Date.now()) {
+  if (payload && payload.exp && payload.exp > Math.floor(Date.now() / 1000)) {
     return { email: payload.email, name: payload.name, role: payload.role };
   }
-
   localStorage.removeItem(TOKEN_KEY);
   return null;
 }
@@ -61,26 +37,41 @@ export function AuthProvider({ children }) {
   const [loading] = useState(false);
 
   async function login(email, password) {
-    await delay(600);
-    const users = getUsers();
-    const found = users.find(u => u.email === email && u.password === btoa(password));
-    if (!found) throw new Error('Invalid email or password');
-    const token = createJWT({ email: found.email, name: found.name, role: found.role });
-    localStorage.setItem(TOKEN_KEY, token);
-    setUser({ email: found.email, name: found.name, role: found.role });
-    return token;
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Login failed');
+    }
+
+    const data = await res.json();
+    if (!data.token) throw new Error('No token returned');
+    localStorage.setItem(TOKEN_KEY, data.token);
+    setUser({ email: data.user.email, name: data.user.name, role: data.user.role });
+    return data.token;
   }
 
   async function register(name, email, password) {
-    await delay(600);
-    const users = getUsers();
-    if (users.find(u => u.email === email)) throw new Error('Email already registered');
-    const newUser = { name, email, password: btoa(password), role: 'admin' };
-    saveUsers([...users, newUser]);
-    const token = createJWT({ email, name, role: 'admin' });
-    localStorage.setItem(TOKEN_KEY, token);
-    setUser({ email, name, role: 'admin' });
-    return token;
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Register failed');
+    }
+
+    const data = await res.json();
+    if (!data.token) throw new Error('No token returned');
+    localStorage.setItem(TOKEN_KEY, data.token);
+    setUser({ email: data.user.email, name: data.user.name, role: data.user.role });
+    return data.token;
   }
 
   function logout() {
@@ -101,8 +92,4 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   return useContext(AuthContext);
-}
-
-function delay(ms) {
-  return new Promise(r => setTimeout(r, ms));
 }
