@@ -15,6 +15,8 @@ Inspired by real-world chatbot products like Boost AI — featuring a zero-depen
 server-side JWT authentication, a real OpenAI backend, Supabase usage tracking,
 Google Tag Manager integration, and multi-region Nordic market support.
 
+> **Note:** Some dashboard panels (Deploy, Regions stats, GTM tag management) are UI demonstrations / proof-of-concept with simulated data. Core features — widget embedding, JWT auth, OpenAI chat API, and GTM `dataLayer` events — are fully functional.
+
 ### 🚀 [Live Demo → nexbot-steel.vercel.app](https://nexbot-steel.vercel.app/)
 
 [Features](#-features) · [Getting Started](#-getting-started) · [Widget Embed](#-widget-embed) · [API Reference](#-api-reference) · [Architecture](#-architecture)
@@ -40,9 +42,9 @@ A complete management interface with persistent config, live preview, and real d
 | Panel | Description |
 |-------|-------------|
 | **Chatbot Config** | Customize bot name, greeting, model, system prompt, theme — auto-generates embed snippet |
-| **GTM & Tracking** | Manage custom tags/triggers, fire test events, view live `dataLayer` event log |
-| **Regions** | Activate/pause chatbot per Nordic region with live user/session stats |
-| **Deploy** | Staging → Production CI/CD flow with deployment history |
+| **GTM & Tracking** | Custom tags/triggers UI + real `window.dataLayer` event push — tag persistence is a UI demo, not a live GTM container |
+| **Regions** | Nordic region management UI with per-region activation controls — user/session stats are simulated |
+| **Deploy** | Staging → Production deployment flow UI — simulated CI/CD steps and deployment history (proof of concept) |
 | **Live Preview** | Real-time widget preview rendered in an iframe with live config controls |
 
 ### 🔐 Server-Side Authentication
