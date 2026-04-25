@@ -6,6 +6,7 @@
 <img src="https://img.shields.io/badge/OpenAI-GPT--4.1-412991?style=for-the-badge&logo=openai&logoColor=white"/>
 <img src="https://img.shields.io/badge/Supabase-Integrated-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white"/>
 <img src="https://img.shields.io/badge/JWT-HMAC--SHA256-000000?style=for-the-badge&logo=jsonwebtokens&logoColor=white"/>
+<img src="https://img.shields.io/badge/Vercel-Deployed-000000?style=for-the-badge&logo=vercel&logoColor=white"/>
 
 # 🤖 NexBot — Embeddable Chatbot Platform
 
@@ -13,6 +14,8 @@
 Inspired by real-world chatbot products like Boost AI — featuring a zero-dependency embeddable widget,
 server-side JWT authentication, a real OpenAI backend, Supabase usage tracking,
 Google Tag Manager integration, and multi-region Nordic market support.
+
+### 🚀 [Live Demo → nexbot-steel.vercel.app](https://nexbot-steel.vercel.app/)
 
 [Features](#-features) · [Getting Started](#-getting-started) · [Widget Embed](#-widget-embed) · [API Reference](#-api-reference) · [Architecture](#-architecture)
 
@@ -56,12 +59,25 @@ When `SUPABASE_URL` and `SUPABASE_KEY` are set, every chat request is logged to 
 
 ## 🚀 Getting Started
 
-### Prerequisites
+### 🌐 Live Demo
+
+Try it now — no installation required:
+
+**[https://nexbot-steel.vercel.app/](https://nexbot-steel.vercel.app/)**
+
+```
+Email:    demo@nexbot.io
+Password: demo1234
+```
+
+### Local Development
+
+#### Prerequisites
 - Node.js 18+
 - npm
 - An OpenAI API key (required for live AI responses)
 
-### Installation
+#### Installation
 
 ```bash
 git clone https://github.com/wsqreis/nexbot.git
@@ -69,7 +85,7 @@ cd nexbot
 npm install
 ```
 
-### Environment Setup
+#### Environment Setup
 
 ```bash
 cp .env.example .env
@@ -93,20 +109,13 @@ ALLOW_REGISTRATION=true            # set false to lock in prod
 TOKEN_EXP_SECONDS=3600             # JWT expiry (default: 1h)
 ```
 
-### Run
+#### Run
 
 ```bash
 npm run dev
 ```
 
 Open [http://localhost:5173](http://localhost:5173)
-
-### Demo Credentials
-
-```
-Email:    demo@nexbot.io
-Password: demo1234
-```
 
 ---
 
