@@ -97,6 +97,33 @@ Drop this snippet into any page (the project serves the widget at `/widget/nexbo
 </script>
 ```
 
+### Minimal cross-site embed
+
+If you want to embed the hosted widget from another website (cross-origin), include the script with the full URL and set `data-api-url` to the absolute API path on your deploy:
+
+```html
+<script src="https://nexbot-steel.vercel.app/widget/nexbot.js"
+  data-bot-id="demo"
+  data-api-url="https://nexbot-steel.vercel.app/api/chat">
+</script>
+```
+
+This will load the widget from the deploy and make the widget POST chat requests to `https://nexbot-steel.vercel.app/api/chat`.
+
+### Quick console test
+
+To test the widget quickly from the browser console (useful for previewing on any page), paste the following into DevTools and press Enter:
+
+```javascript
+const s = document.createElement('script');
+s.src = 'https://nexbot-steel.vercel.app/widget/nexbot.js';
+s.dataset.botId = 'demo';
+s.dataset.apiUrl = 'https://nexbot-steel.vercel.app/api/chat';
+document.body.appendChild(s);
+```
+
+Open DevTools and look for the log `[NexBot] Widget loaded.`. Click the floating action button (FAB) to open the chat and send a message.
+
 ### Supported attributes
 
 | Attribute | Default | Purpose |

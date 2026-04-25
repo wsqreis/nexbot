@@ -114,7 +114,7 @@ export default function LivePreview() {
     </div>
     <script
         ${attrs}
-      </script>
+      ></script>
   </body>
 </html>`;
   }, [lang, position, region, savedConfig, theme]);
