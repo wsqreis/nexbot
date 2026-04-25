@@ -7,10 +7,13 @@ import {
 import { Card, Field, PageHeader } from './ui';
 
 const THEMES = ['#6366f1', '#2563eb', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+const MODEL_OPTIONS = ['gpt-4.1-mini', 'gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo'];
 
 export default function ChatbotConfig() {
   const [config, setConfig] = useState(() => loadChatbotConfig());
   const [saved, setSaved] = useState(false);
+  const [selectedModel, setSelectedModel] = useState(() => MODEL_OPTIONS.includes(config.model) ? config.model : 'custom');
+  const [customModel, setCustomModel] = useState(() => MODEL_OPTIONS.includes(config.model) ? '' : config.model);
 
   function update(key, value) {
     setConfig(prev => ({ ...prev, [key]: value }));
@@ -101,7 +104,35 @@ export default function ChatbotConfig() {
 
         <Card title="Model Settings">
           <Field label="Model">
-            <input style={styles.input} value={config.model} onChange={e => update('model', e.target.value)} />
+            <select
+              style={styles.input}
+              value={selectedModel}
+              onChange={e => {
+                const v = e.target.value;
+                setSelectedModel(v);
+                if (v === 'custom') {
+                  update('model', customModel || '');
+                } else {
+                  update('model', v);
+                }
+              }}
+            >
+              {MODEL_OPTIONS.map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+              <option value="custom">Other (custom)</option>
+            </select>
+            {selectedModel === 'custom' && (
+              <input
+                style={{ ...styles.input, marginTop: 8 }}
+                placeholder="Enter custom model string"
+                value={customModel}
+                onChange={e => {
+                  setCustomModel(e.target.value);
+                  update('model', e.target.value);
+                }}
+              />
+            )}
           </Field>
           <Field label="System Prompt">
             <textarea
