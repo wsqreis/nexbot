@@ -7,13 +7,16 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "db:migrate": "node scripts/run-migration.js db/migrations/001_create_nexbot_usage.sql"
   },
   "dependencies": {
     "lucide-react": "^1.11.0",
+    "@supabase/supabase-js": "^2.34.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "react-router-dom": "^7.14.2"
+    "react-router-dom": "^7.14.2",
+    "pg": "^8.11.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

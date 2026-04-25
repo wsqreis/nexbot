@@ -1,9 +1,11 @@
 const DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'gpt-4.1-mini';
 
+import { supabase } from './supabase.js';
+
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 }
 
 function sendJson(res, status, payload) {
@@ -49,6 +51,66 @@ async function readJsonBody(req) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
+async function getUserFromAuthHeader(req) {
+  const auth = req.headers && (req.headers.authorization || req.headers.Authorization);
+  if (!auth || !auth.startsWith('Bearer ')) return null;
+  const token = auth.split(' ')[1];
+  if (!token) return null;
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data?.user) return null;
+    return data.user;
+  } catch {
+    return null;
+  }
+}
+
+async function moderateMessage(message) {
+  if (!process.env.OPENAI_API_KEY) return { ok: true };
+  try {
+    const resp = await fetch('https://api.openai.com/v1/moderations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+      body: JSON.stringify({ input: message }),
+    });
+    const data = await resp.json();
+    const flagged = !!(data && data.results && data.results[0] && data.results[0].flagged);
+    return { ok: !flagged, details: data };
+  } catch (err) {
+    return { ok: true };
+  }
+}
+
+// Check rate limit using Supabase table `nexbot_usage` (identifier, created_at)
+async function checkRateLimit(identifier) {
+  if (!supabase) return { ok: true };
+  const windowSec = Number(process.env.RATE_LIMIT_WINDOW_SECONDS || '60');
+  const limit = Number(process.env.RATE_LIMIT_PER_WINDOW || '20');
+  const since = new Date(Date.now() - windowSec * 1000).toISOString();
+  try {
+    const { count, error } = await supabase
+      .from('nexbot_usage')
+      .select('*', { count: 'exact' })
+      .eq('identifier', identifier)
+      .gte('created_at', since);
+    if (error) return { ok: true };
+    if (typeof count === 'number' && count >= limit) return { ok: false, retryAfter: windowSec };
+    return { ok: true };
+  } catch (err) {
+    return { ok: true };
+  }
+}
+
+async function recordUsage(entry) {
+  if (!supabase) return;
+  try {
+    await supabase.from('nexbot_usage').insert([entry]);
+  } catch (err) {
+    // ignore failures; useful in dev when table not created
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     setCors(res);
@@ -87,8 +149,31 @@ export default async function handler(req, res) {
     sendJson(res, 400, { error: 'Message is required' });
     return;
   }
-
   const effectiveModel = model || DEFAULT_MODEL;
+
+  // Identify user (from Authorization header or sessionToken fallback)
+  const user = await getUserFromAuthHeader(req);
+  const identifier = user?.email || (body && body.sessionToken) || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'anonymous';
+
+  // If REQUIRE_AUTH=true enforce authentication
+  if (process.env.REQUIRE_AUTH === 'true' && !user) {
+    sendJson(res, 401, { error: 'Authentication required' });
+    return;
+  }
+
+  // Moderation check
+  const mod = await moderateMessage(message.trim());
+  if (!mod.ok) {
+    sendJson(res, 403, { error: 'Message violates content policy', details: mod.details });
+    return;
+  }
+
+  // Rate limiting
+  const rl = await checkRateLimit(identifier);
+  if (!rl.ok) {
+    sendJson(res, 429, { error: 'Rate limit exceeded', retry_after: rl.retryAfter || 60 });
+    return;
+  }
 
   const input = [
     ...normalizeHistory(history).map(item => ({
@@ -123,6 +208,10 @@ export default async function handler(req, res) {
     }
 
     const reply = getTextFromResponse(data) || 'Sorry, I could not generate a response.';
+
+    // record usage (best-effort)
+    recordUsage({ identifier, bot_id: body.botId || 'unknown', region: body.region || 'unknown', model: effectiveModel, created_at: new Date().toISOString() });
+
     sendJson(res, 200, { reply, model: data.model || effectiveModel, id: data.id });
   } catch (error) {
     sendJson(res, 500, { error: error instanceof Error ? error.message : 'Unexpected server error' });
