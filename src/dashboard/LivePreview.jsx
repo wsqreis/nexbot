@@ -11,8 +11,9 @@ export default function LivePreview() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const embedSnippet = useMemo(() => {
+    const widgetSrc = getWidgetScriptUrl(savedConfig.apiUrl);
     const attrs = [
-      ['src', '/widget/nexbot.js'],
+      ['src', widgetSrc],
       ['data-bot-id', savedConfig.botId],
       ['data-bot-name', savedConfig.botName],
       ['data-greeting', savedConfig.greeting],
@@ -193,6 +194,24 @@ function escapeAttr(value) {
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+function getWidgetScriptUrl(apiUrl) {
+  const widgetPath = '/widget/nexbot.js';
+
+  try {
+    if (typeof apiUrl === 'string' && /^https?:\/\//i.test(apiUrl)) {
+      return new URL(widgetPath, apiUrl).toString();
+    }
+  } catch {
+    // Fall back to current origin if apiUrl is malformed.
+  }
+
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}${widgetPath}`;
+  }
+
+  return widgetPath;
 }
 
 function escapeHtml(value) {

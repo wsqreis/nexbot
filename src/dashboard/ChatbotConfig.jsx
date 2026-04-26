@@ -32,8 +32,9 @@ export default function ChatbotConfig() {
   }
 
   const snippetCode = useMemo(() => {
+    const widgetSrc = getWidgetScriptUrl(config.apiUrl);
     const attrs = [
-      ['src', '/widget/nexbot.js'],
+      ['src', widgetSrc],
       ['data-bot-id', config.botId],
       ['data-bot-name', config.botName],
       ['data-greeting', config.greeting],
@@ -181,6 +182,24 @@ function escapeAttr(value) {
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+function getWidgetScriptUrl(apiUrl) {
+  const widgetPath = '/widget/nexbot.js';
+
+  try {
+    if (typeof apiUrl === 'string' && /^https?:\/\//i.test(apiUrl)) {
+      return new URL(widgetPath, apiUrl).toString();
+    }
+  } catch {
+    // Fall back to current origin if apiUrl is malformed.
+  }
+
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}${widgetPath}`;
+  }
+
+  return widgetPath;
 }
 
 const styles = {
