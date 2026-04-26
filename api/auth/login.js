@@ -1,4 +1,5 @@
 import { readJsonBody, readUsers, hashPassword, signToken, sendJson, setCors, DEMO_EMAIL, DEMO_PASSWORD } from '../authUtils.js';
+import { supabase } from '../supabase.js';
 
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
@@ -28,9 +29,25 @@ export default async function handler(req, res) {
   }
 
   try {
-    const users = await readUsers();
     const hashed = hashPassword(password);
-    let user = users.find(u => u.email === email);
+    let user = null;
+
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('users')
+        .select('name, email, password, role')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (error) {
+        throw new Error(error.message || 'Failed fetching user');
+      }
+
+      user = data || null;
+    } else {
+      const users = await readUsers();
+      user = users.find(u => u.email === email) || null;
+    }
 
     if (!user) {
       // Allow demo fallback when server has no stored user

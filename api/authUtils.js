@@ -26,6 +26,7 @@ export async function readJsonBody(req) {
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const IS_VERCEL = process.env.VERCEL === '1';
 export const AUTH_SECRET = process.env.AUTH_SECRET || 'nexbot_dev_secret';
 export const DEMO_EMAIL = process.env.DEMO_EMAIL || 'demo@nexbot.io';
 export const DEMO_PASSWORD = process.env.DEMO_PASSWORD || 'demo1234';
@@ -42,6 +43,12 @@ export async function readUsers() {
 }
 
 export async function saveUsers(users) {
+  if (IS_VERCEL) {
+    const err = new Error('User persistence is not available in Vercel serverless filesystem');
+    err.code = 'READ_ONLY_FS';
+    throw err;
+  }
+
   await fs.mkdir(DATA_DIR, { recursive: true });
   await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2), 'utf8');
 }

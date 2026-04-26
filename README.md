@@ -50,7 +50,7 @@ A complete management interface with persistent config, live preview, and real d
 ### 🔐 Server-Side Authentication
 - **Real JWT** signed with `HMAC-SHA256` via Node.js `crypto` module
 - Passwords hashed with `SHA-256` before storage
-- Users persisted to `data/users.json`
+- Users persisted to Supabase table `users` (production-ready on Vercel)
 - Built-in demo user fallback (`demo@nexbot.io` / `demo1234`)
 - `ALLOW_REGISTRATION=false` flag to lock registration in production
 
@@ -101,7 +101,7 @@ OPENAI_API_KEY=sk-...
 
 # Optional — enables usage tracking and rate limiting
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-service-role-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
 # Optional — customise auth behaviour
 AUTH_SECRET=your-secret-key        # default: nexbot_dev_secret
@@ -169,7 +169,8 @@ Drop this snippet anywhere in your HTML:
                      ▼
           ┌──────────────────────┐
           │  api/auth/login.js   │
-          │  - Read users.json   │
+          │  - Read user from     │
+          │    Supabase users     │
           │  - SHA-256 password  │
           │  - Sign HMAC-SHA256  │
           │    JWT token         │
@@ -270,6 +271,23 @@ region      text        -- from data-region
 model       text        -- model used
 meta        jsonb       -- extra context
 created_at  timestamptz -- timestamp
+```
+
+### Auth Table (`users`)
+
+For login/registration persistence, create this table in Supabase:
+
+```sql
+create extension if not exists pgcrypto;
+
+create table if not exists public.users (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  email text not null unique,
+  password text not null,
+  role text not null default 'admin',
+  created_at timestamptz not null default now()
+);
 ```
 
 ---
