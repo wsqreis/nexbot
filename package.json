@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "db:migrate": "node scripts/run-migration.js db/migrations/001_create_nexbot_usage.sql"
+    "db:migrate": "node scripts/run-migration.js db/migrations/001_create_nexbot_usage.sql && node scripts/run-migration.js db/migrations/002_create_users.sql"
   },
   "dependencies": {
     "lucide-react": "^1.11.0",
