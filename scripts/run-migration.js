@@ -2,6 +2,22 @@
 import fs from 'fs/promises';
 import { Client } from 'pg';
 
+function shouldUseSsl(connectionString) {
+  if (process.env.DATABASE_SSL === 'true') return { rejectUnauthorized: false };
+  if (process.env.DATABASE_SSL === 'false') return false;
+
+  try {
+    const { hostname } = new URL(connectionString);
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === 'db' || hostname === 'postgres') {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+
+  return { rejectUnauthorized: false };
+}
+
 async function main() {
   const args = process.argv.slice(2);
   if (args.length < 1) {
@@ -18,7 +34,7 @@ async function main() {
 
   try {
     const sql = await fs.readFile(sqlPath, 'utf8');
-    const client = new Client({ connectionString: dbUrl, ssl: { rejectUnauthorized: false } });
+    const client = new Client({ connectionString: dbUrl, ssl: shouldUseSsl(dbUrl) });
     await client.connect();
     console.log('Connected to database, running migration...');
     await client.query(sql);

@@ -1,5 +1,6 @@
 const DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'gpt-4.1-mini';
 
+import { countRecentUsage, recordUsage } from './db.js';
 import { supabase } from './supabase.js';
 
 function setCors(res) {
@@ -77,37 +78,23 @@ async function moderateMessage(message) {
     const data = await resp.json();
     const flagged = !!(data && data.results && data.results[0] && data.results[0].flagged);
     return { ok: !flagged, details: data };
-  } catch (err) {
+  } catch {
     return { ok: true };
   }
 }
 
-// Check rate limit using Supabase table `nexbot_usage` (identifier, created_at)
 async function checkRateLimit(identifier) {
-  if (!supabase) return { ok: true };
   const windowSec = Number(process.env.RATE_LIMIT_WINDOW_SECONDS || '60');
   const limit = Number(process.env.RATE_LIMIT_PER_WINDOW || '20');
   const since = new Date(Date.now() - windowSec * 1000).toISOString();
-  try {
-    const { count, error } = await supabase
-      .from('nexbot_usage')
-      .select('*', { count: 'exact' })
-      .eq('identifier', identifier)
-      .gte('created_at', since);
-    if (error) return { ok: true };
-    if (typeof count === 'number' && count >= limit) return { ok: false, retryAfter: windowSec };
-    return { ok: true };
-  } catch (err) {
-    return { ok: true };
-  }
-}
 
-async function recordUsage(entry) {
-  if (!supabase) return;
   try {
-    await supabase.from('nexbot_usage').insert([entry]);
-  } catch (err) {
-    // ignore failures; useful in dev when table not created
+    const count = await countRecentUsage(identifier, since);
+    if (typeof count !== 'number') return { ok: true };
+    if (count >= limit) return { ok: false, retryAfter: windowSec };
+    return { ok: true };
+  } catch {
+    return { ok: true };
   }
 }
 
@@ -132,7 +119,7 @@ export default async function handler(req, res) {
   let body;
   try {
     body = await readJsonBody(req);
-  } catch (err) {
+  } catch {
     sendJson(res, 400, { error: 'Invalid JSON body' });
     return;
   }
@@ -209,8 +196,14 @@ export default async function handler(req, res) {
 
     const reply = getTextFromResponse(data) || 'Sorry, I could not generate a response.';
 
-    // record usage (best-effort)
-    recordUsage({ identifier, bot_id: body.botId || 'unknown', region: body.region || 'unknown', model: effectiveModel, created_at: new Date().toISOString() });
+    recordUsage({
+      identifier,
+      bot_id: body.botId || 'unknown',
+      region: body.region || 'unknown',
+      model: effectiveModel,
+      meta: { authenticated: Boolean(user) },
+      created_at: new Date().toISOString(),
+    });
 
     sendJson(res, 200, { reply, model: data.model || effectiveModel, id: data.id });
   } catch (error) {

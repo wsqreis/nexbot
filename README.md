@@ -50,12 +50,12 @@ A complete management interface with persistent config, live preview, and real d
 ### 🔐 Server-Side Authentication
 - **Real JWT** signed with `HMAC-SHA256` via Node.js `crypto` module
 - Passwords hashed with `SHA-256` before storage
-- Users persisted to Supabase table `users` (production-ready on Vercel)
+- Users persisted through one of three backends: Supabase, Postgres via `DATABASE_URL`, or local `data/users.json`
 - Built-in demo user fallback (`demo@nexbot.io` / `demo1234`)
 - `ALLOW_REGISTRATION=false` flag to lock registration in production
 
-### 📊 Supabase Usage Tracking *(optional)*
-When `SUPABASE_URL` and `SUPABASE_KEY` are set, every chat request is logged to the `nexbot_usage` table — enabling rate limiting, analytics, and abuse prevention without requiring any changes to the widget.
+### 📊 Database-Backed Usage Tracking *(optional)*
+When `SUPABASE_URL` plus a Supabase key are set, or when `DATABASE_URL` points at PostgreSQL, every chat request is logged to the `nexbot_usage` table — enabling rate limiting, analytics, and abuse prevention without requiring any changes to the widget.
 
 ---
 
@@ -99,25 +99,58 @@ Edit `.env` and fill in your values:
 # Required — powers the /api/chat endpoint
 OPENAI_API_KEY=sk-...
 
-# Optional — enables usage tracking and rate limiting
+# Optional — local Postgres or hosted Postgres persistence
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/nexbot
+DATABASE_SSL=false
+
+# Optional — Supabase-hosted persistence and usage logging
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
-# Optional — customise auth behaviour
-AUTH_SECRET=your-secret-key        # default: nexbot_dev_secret
-DEMO_EMAIL=demo@nexbot.io          # default demo login
-DEMO_PASSWORD=demo1234             # default demo password
-ALLOW_REGISTRATION=true            # set false to lock in prod
-TOKEN_EXP_SECONDS=3600             # JWT expiry (default: 1h)
+# Optional — customise auth/runtime behaviour
+AUTH_SECRET=nexbot_dev_secret
+DEMO_EMAIL=demo@nexbot.io
+DEMO_PASSWORD=demo1234
+ALLOW_REGISTRATION=true
+REQUIRE_AUTH=false
+TOKEN_EXP_SECONDS=3600
+RATE_LIMIT_WINDOW_SECONDS=60
+RATE_LIMIT_PER_WINDOW=20
+DEFAULT_MODEL=gpt-4.1-mini
 ```
 
-#### Run
+#### Run with Vite
 
 ```bash
 npm run dev
 ```
 
 Open [http://localhost:5173](http://localhost:5173)
+
+#### Run the production server locally
+
+```bash
+npm run build
+npm run start
+```
+
+Open [http://localhost:3000](http://localhost:3000)
+
+### Docker Self-Hosting
+
+The Docker setup runs the app in one container and PostgreSQL in another. On startup, the app runs the bundled SQL migrations and then serves the built frontend and `/api/*` routes with the native Node server.
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+Open [http://localhost:3000](http://localhost:3000)
+
+#### Notes
+- Docker Compose sets `DATABASE_URL` to the bundled Postgres service automatically.
+- The app still supports the file-backed `data/users.json` fallback outside Docker when no database is configured.
+- For hosted deployments, Supabase remains the preferred durable backend.
 
 ---
 
@@ -195,7 +228,7 @@ The **widget** generates a separate anonymous session token stored in `sessionSt
 
 ## 📡 API Reference
 
-All routes are served by the Vite dev server plugin (`vite.api.js`) in development. In production, deploy these as your server's API handlers.
+In development and Vite preview, `vite.api.js` forwards `/api/*` requests to the canonical handlers in `api/`. In Vercel and the Docker production server, those same handler files are used directly.
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
@@ -251,7 +284,7 @@ Use the **GTM Panel** in the dashboard to create custom tags, map triggers, and 
 
 ---
 
-## 🗄️ Supabase Usage Tracking *(optional)*
+## 🗄️ Database Usage Tracking *(optional)*
 
 Run the migration to create the tracking table:
 
@@ -275,7 +308,7 @@ created_at  timestamptz -- timestamp
 
 ### Auth Table (`users`)
 
-For login/registration persistence, create this table in Supabase:
+For login/registration persistence, create this table in Supabase or in the Postgres database used by Docker Compose:
 
 ```sql
 create extension if not exists pgcrypto;

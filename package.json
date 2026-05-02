@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "start": "node server.mjs",
     "db:migrate": "node scripts/run-migration.js db/migrations/001_create_nexbot_usage.sql && node scripts/run-migration.js db/migrations/002_create_users.sql"
   },
   "dependencies": {
