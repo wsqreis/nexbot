@@ -21,7 +21,43 @@ export function loadChatbotConfig() {
   }
 }
 
-export function saveChatbotConfig(config) {
+export function saveLocalChatbotConfig(config) {
   localStorage.setItem(CHATBOT_CONFIG_KEY, JSON.stringify(config));
 }
 
+export async function fetchChatbotConfig(token) {
+  const res = await fetch('/api/dashboard/config', {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed loading chatbot config');
+  }
+
+  const data = await res.json();
+  const config = { ...DEFAULT_CHATBOT_CONFIG, ...(data.config || {}) };
+  saveLocalChatbotConfig(config);
+  return config;
+}
+
+export async function persistChatbotConfig(config, token) {
+  const res = await fetch('/api/dashboard/config', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ config }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed saving chatbot config');
+  }
+
+  const data = await res.json();
+  const savedConfig = { ...DEFAULT_CHATBOT_CONFIG, ...(data.config || {}) };
+  saveLocalChatbotConfig(savedConfig);
+  return savedConfig;
+}

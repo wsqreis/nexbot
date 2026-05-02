@@ -1,14 +1,41 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useAuth } from '../auth/AuthContext';
 import { Card, PageHeader } from './ui';
-import { loadChatbotConfig } from './chatbotConfigStore';
+import { getCachedDashboardConfig, loadDashboardConfig } from './configApi';
 
 export default function LivePreview() {
-  const savedConfig = loadChatbotConfig();
+  const { getToken } = useAuth();
+  const [savedConfig, setSavedConfig] = useState(() => getCachedDashboardConfig());
   const [region, setRegion] = useState('fi');
   const [lang, setLang] = useState('en');
   const [theme, setTheme] = useState(savedConfig.theme);
   const [position, setPosition] = useState(savedConfig.position);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function load() {
+      try {
+        const config = await loadDashboardConfig(getToken(), true);
+        if (!mounted) return;
+        setSavedConfig(config);
+        setTheme(config.theme);
+        setPosition(config.position);
+        setError('');
+      } catch (loadError) {
+        if (!mounted) return;
+        setError(loadError instanceof Error ? loadError.message : 'Failed loading saved config');
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    load();
+    return () => { mounted = false; };
+  }, [getToken]);
 
   const embedSnippet = useMemo(() => {
     const widgetSrc = getWidgetScriptUrl(savedConfig.apiUrl);
@@ -123,6 +150,9 @@ export default function LivePreview() {
   return (
     <div>
       <PageHeader title="Live Preview" subtitle="This panel now renders the real embeddable widget inside an isolated preview page." />
+
+      {loading && <p style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>Loading saved configuration…</p>}
+      {error && <p style={{ fontSize: 13, color: '#b91c1c', marginBottom: 12 }}>{error}</p>}
 
       <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 20 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

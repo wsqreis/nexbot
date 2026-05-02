@@ -1,146 +1,198 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useAuth } from '../auth/AuthContext';
+import { approveDeployment, checkDeploymentHealth, createDeployment, fetchDeployments } from './deploymentsApi';
 import { Card, PageHeader } from './ui';
 
-const STEPS_STAGING = [
-  'Running unit tests…',
-  'Building widget bundle…',
-  'Running end-to-end tests…',
-  'Uploading to staging CDN…',
-  'Running smoke tests on staging…',
-  '✅ Staging deployment complete!',
-];
-
-const STEPS_PROD = [
-  'Verifying staging approval…',
-  'Creating production snapshot…',
-  'Running security checks…',
-  'Deploying to production CDN (fi, sv, no)…',
-  'Invalidating CDN cache…',
-  'Verifying health endpoints…',
-  '✅ Production deployment complete!',
-];
-
-const DEPLOY_HISTORY = [
-  { id: 'v1.3.2', env: 'production', date: '2025-05-14 14:22', status: 'success', by: 'Wesley Reis', regions: ['fi', 'sv', 'no'] },
-  { id: 'v1.3.1', env: 'staging',    date: '2025-05-14 13:45', status: 'success', by: 'Wesley Reis', regions: ['fi', 'sv', 'no'] },
-  { id: 'v1.3.0', env: 'production', date: '2025-05-12 10:11', status: 'success', by: 'Wesley Reis', regions: ['fi', 'sv'] },
-  { id: 'v1.2.9', env: 'staging',    date: '2025-05-11 16:30', status: 'failed',  by: 'Wesley Reis', regions: ['fi'] },
-];
+const DEFAULT_REGIONS = ['fi', 'sv', 'no'];
 
 export default function DeployPanel() {
-  const [stagingLog, setStagingLog]   = useState([]);
-  const [prodLog, setProdLog]         = useState([]);
-  const [stagingDone, setStagingDone] = useState(false);
-  const [prodDone, setProdDone]       = useState(false);
-  const [running, setRunning]         = useState(null);
-  const [version, setVersion]         = useState('v1.3.3');
+  const { getToken } = useAuth();
+  const [deployments, setDeployments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState('');
+  const [version, setVersion] = useState('v1.3.3');
+  const [externalUrl, setExternalUrl] = useState('http://localhost:3000');
 
-  async function runDeploy(type) {
-    if (running) return;
-    setRunning(type);
-    const steps = type === 'staging' ? STEPS_STAGING : STEPS_PROD;
-    if (type === 'staging') { setStagingLog([]); setStagingDone(false); }
-    else                    { setProdLog([]);    setProdDone(false); }
+  useEffect(() => {
+    let mounted = true;
 
-    for (let i = 0; i < steps.length; i++) {
-      await new Promise(r => setTimeout(r, 700 + Math.random() * 500));
-      if (type === 'staging') setStagingLog(prev => [...prev, steps[i]]);
-      else                    setProdLog(prev => [...prev, steps[i]]);
+    async function load() {
+      try {
+        const items = await fetchDeployments(getToken());
+        if (!mounted) return;
+        setDeployments(items);
+        setError('');
+      } catch (loadError) {
+        if (!mounted) return;
+        setError(loadError instanceof Error ? loadError.message : 'Failed loading deployments');
+      } finally {
+        if (mounted) setLoading(false);
+      }
     }
-    if (type === 'staging') setStagingDone(true);
-    else                    setProdDone(true);
-    setRunning(null);
+
+    load();
+    return () => { mounted = false; };
+  }, [getToken]);
+
+  const latestStaging = useMemo(
+    () => deployments.find(deployment => deployment.environment === 'staging') || null,
+    [deployments],
+  );
+  const latestProduction = useMemo(
+    () => deployments.find(deployment => deployment.environment === 'production') || null,
+    [deployments],
+  );
+
+  async function requestDeployment(environment) {
+    setSaving(environment);
+    try {
+      const items = await createDeployment({
+        version,
+        environment,
+        regions: DEFAULT_REGIONS,
+        externalUrl,
+      }, getToken());
+      setDeployments(items);
+      setError('');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Failed creating deployment request');
+    } finally {
+      setSaving('');
+    }
+  }
+
+  async function approveLatestProduction() {
+    if (!latestProduction) return;
+    setSaving(`approve-${latestProduction.id}`);
+    try {
+      const items = await approveDeployment(latestProduction.id, getToken());
+      setDeployments(items);
+      setError('');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Failed approving deployment');
+    } finally {
+      setSaving('');
+    }
+  }
+
+  async function runHealthCheck(deployment) {
+    setSaving(`health-${deployment.id}`);
+    try {
+      const result = await checkDeploymentHealth(deployment.id, deployment.externalUrl || externalUrl, getToken());
+      setDeployments(result.deployments);
+      setError('');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Failed running health check');
+    } finally {
+      setSaving('');
+    }
   }
 
   return (
     <div>
-      <PageHeader title="Deploy" subtitle="Manage staging and production deployments across all regions." />
+      <PageHeader title="Deploy" subtitle="Track deployment requests, approvals, and health checks without pretending to own external CI/CD." />
+
+      {loading && <p style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>Loading deployment activity…</p>}
+      {error && <p style={{ fontSize: 13, color: '#b91c1c', marginBottom: 12 }}>{error}</p>}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>
-        {/* Staging */}
-        <Card title="Staging Deployment">
+        <Card title="Staging Request">
           <div style={{ marginBottom: 14 }}>
             <label style={lbl}>Version tag</label>
-            <input style={inp} value={version} onChange={e => setVersion(e.target.value)} />
+            <input style={inp} value={version} onChange={event => setVersion(event.target.value)} />
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={lbl}>Target URL for health checks</label>
+            <input style={inp} value={externalUrl} onChange={event => setExternalUrl(event.target.value)} />
           </div>
           <div style={{ marginBottom: 14 }}>
             <label style={lbl}>Target regions</label>
             <div style={{ display: 'flex', gap: 8 }}>
-              {['🇫🇮 fi', '🇸🇪 sv', '🇳🇴 no'].map(r => (
-                <span key={r} style={regionTag}>{r}</span>
+              {DEFAULT_REGIONS.map(region => (
+                <span key={region} style={regionTag}>{region}</span>
               ))}
             </div>
           </div>
           <button
-            style={{ ...deployBtn, background: '#0ea5e9', opacity: running ? .6 : 1 }}
-            onClick={() => runDeploy('staging')}
-            disabled={!!running}
+            style={{ ...deployBtn, background: '#0ea5e9', opacity: saving ? 0.6 : 1 }}
+            onClick={() => requestDeployment('staging')}
+            disabled={Boolean(saving)}
           >
-            {running === 'staging' ? '⏳ Deploying…' : '🚀 Deploy to Staging'}
+            {saving === 'staging' ? 'Saving…' : 'Request Staging Deploy'}
           </button>
 
-          {stagingLog.length > 0 && (
+          {latestStaging && (
             <div style={logBox}>
-              {stagingLog.map((line, i) => (
-                <div key={i} style={{ color: line.startsWith('✅') ? '#4ade80' : '#94a3b8', fontSize: 12 }}>
-                  {!line.startsWith('✅') && <span style={{ color: '#6366f1', marginRight: 6 }}>{'>'}</span>}
-                  {line}
-                </div>
+              {latestStaging.log.map((line, index) => (
+                <div key={`${latestStaging.id}-log-${index}`} style={{ color: '#94a3b8', fontSize: 12 }}>{line}</div>
               ))}
-              {stagingDone && <div style={{ marginTop: 6, color: '#0ea5e9', fontSize: 12 }}>🔗 https://staging.nexbot.io/widget/nexbot.js</div>}
+              <div style={{ marginTop: 6, color: '#0ea5e9', fontSize: 12 }}>
+                Status: {latestStaging.status}
+              </div>
             </div>
           )}
         </Card>
 
-        {/* Production */}
-        <Card title="Production Deployment">
-          <div style={{ ...alertBox, ...(stagingDone ? {} : { opacity: .6 }) }}>
-            {stagingDone
-              ? '✅ Staging approved. Ready for production.'
-              : '⚠️ Deploy and approve staging first.'}
+        <Card title="Production Request">
+          <div style={alertBox}>
+            {latestProduction
+              ? `Latest production request status: ${latestProduction.status}`
+              : 'No production requests yet.'}
           </div>
           <div style={{ marginBottom: 14, marginTop: 14 }}>
             <label style={lbl}>Environment</label>
-            <select style={inp}><option>production</option></select>
+            <select style={inp} value="production" readOnly>
+              <option>production</option>
+            </select>
           </div>
           <button
-            style={{ ...deployBtn, background: stagingDone ? '#6366f1' : '#94a3b8', opacity: running || !stagingDone ? .6 : 1 }}
-            onClick={() => runDeploy('production')}
-            disabled={!!running || !stagingDone}
+            style={{ ...deployBtn, background: '#6366f1', opacity: saving ? 0.6 : 1 }}
+            onClick={() => requestDeployment('production')}
+            disabled={Boolean(saving)}
           >
-            {running === 'production' ? '⏳ Deploying…' : '🚀 Deploy to Production'}
+            {saving === 'production' ? 'Saving…' : 'Request Production Deploy'}
           </button>
 
-          {prodLog.length > 0 && (
-            <div style={logBox}>
-              {prodLog.map((line, i) => (
-                <div key={i} style={{ color: line.startsWith('✅') ? '#4ade80' : '#94a3b8', fontSize: 12 }}>
-                  {!line.startsWith('✅') && <span style={{ color: '#6366f1', marginRight: 6 }}>{'>'}</span>}
-                  {line}
-                </div>
-              ))}
-              {prodDone && <div style={{ marginTop: 6, color: '#4ade80', fontSize: 12 }}>🔗 https://cdn.nexbot.io/widget/nexbot.js</div>}
+          {latestProduction && (
+            <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+              <button
+                style={{ ...smallBtn, background: '#10b981', color: 'white' }}
+                onClick={approveLatestProduction}
+                disabled={saving === `approve-${latestProduction.id}`}
+              >
+                {saving === `approve-${latestProduction.id}` ? 'Saving…' : 'Approve'}
+              </button>
+              <button
+                style={{ ...smallBtn, background: '#0f172a', color: 'white' }}
+                onClick={() => runHealthCheck(latestProduction)}
+                disabled={saving === `health-${latestProduction.id}`}
+              >
+                {saving === `health-${latestProduction.id}` ? 'Checking…' : 'Run Health Check'}
+              </button>
             </div>
           )}
         </Card>
       </div>
 
-      {/* History */}
       <Card title="Deployment History">
+        <p style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
+          This panel stores deployment requests, approvals, and health checks in the app. External deployment execution still needs real CI/CD or platform integration.
+        </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {DEPLOY_HISTORY.map(d => (
-            <div key={d.id + d.date} style={historyRow}>
-              <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: '#0f172a', minWidth: 60 }}>{d.id}</span>
-              <span style={{ ...envBadge, background: d.env === 'production' ? '#ede9fe' : '#dbeafe', color: d.env === 'production' ? '#5b21b6' : '#1d4ed8' }}>
-                {d.env}
+          {deployments.map(deployment => (
+            <div key={deployment.id} style={historyRow}>
+              <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: '#0f172a', minWidth: 60 }}>{deployment.version}</span>
+              <span style={{ ...envBadge, background: deployment.environment === 'production' ? '#ede9fe' : '#dbeafe', color: deployment.environment === 'production' ? '#5b21b6' : '#1d4ed8' }}>
+                {deployment.environment}
               </span>
-              <span style={{ fontSize: 12, color: '#64748b', flex: 1 }}>{d.date}</span>
-              <span style={{ fontSize: 12, color: '#64748b' }}>{d.by}</span>
+              <span style={{ fontSize: 12, color: '#64748b', flex: 1 }}>{new Date(deployment.createdAt).toLocaleString()}</span>
+              <span style={{ fontSize: 12, color: '#64748b' }}>{deployment.requestedBy}</span>
               <div style={{ display: 'flex', gap: 4 }}>
-                {d.regions.map(r => <span key={r} style={regionTag}>{r}</span>)}
+                {(deployment.regions || []).map(region => <span key={`${deployment.id}-${region}`} style={regionTag}>{region}</span>)}
               </div>
-              <span style={{ fontSize: 12, fontWeight: 600, color: d.status === 'success' ? '#10b981' : '#ef4444' }}>
-                {d.status === 'success' ? '✓ success' : '✗ failed'}
+              <span style={{ fontSize: 12, fontWeight: 600, color: deployment.status === 'failed' ? '#ef4444' : '#10b981' }}>
+                {deployment.status}
               </span>
             </div>
           ))}
@@ -153,6 +205,7 @@ export default function DeployPanel() {
 const lbl = { fontSize: 12, fontWeight: 500, color: '#475569', display: 'block', marginBottom: 6 };
 const inp = { width: '100%', background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: 8, padding: '9px 12px', fontSize: 13, color: '#0f172a', outline: 'none', fontFamily: 'inherit' };
 const deployBtn = { color: 'white', border: 'none', borderRadius: 10, padding: '11px 20px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', width: '100%', marginTop: 4 };
+const smallBtn = { border: 'none', borderRadius: 8, padding: '9px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' };
 const logBox = { marginTop: 14, background: '#0f172a', borderRadius: 8, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 180, overflow: 'auto' };
 const alertBox = { background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#166534' };
 const historyRow = { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' };

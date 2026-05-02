@@ -131,13 +131,15 @@
     #nexbot-fab:hover { transform: scale(1.08); box-shadow: 0 6px 28px rgba(0,0,0,.32); }
     #nexbot-fab svg { width: 26px; height: 26px; fill: white; }
     #nexbot-window {
-      position: absolute; bottom: 68px; right: 0;
+      position: absolute; bottom: 68px;
       width: 360px; height: 520px; border-radius: 16px;
       background: #fff; box-shadow: 0 16px 48px rgba(0,0,0,.18);
       display: flex; flex-direction: column; overflow: hidden;
-      transform-origin: bottom right; transition: transform .25s cubic-bezier(.4,0,.2,1), opacity .2s;
+      transition: transform .25s cubic-bezier(.4,0,.2,1), opacity .2s;
       transform: scale(.85); opacity: 0; pointer-events: none;
     }
+    #nexbot-root.bottom-right #nexbot-window { right: 0; transform-origin: bottom right; }
+    #nexbot-root.bottom-left #nexbot-window { left: 0; transform-origin: bottom left; }
     #nexbot-window.open { transform: scale(1); opacity: 1; pointer-events: all; }
     #nexbot-header {
       background: ${config.theme}; padding: 16px 18px; display: flex; align-items: center; gap: 10px;

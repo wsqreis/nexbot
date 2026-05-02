@@ -1,17 +1,18 @@
-import { useMemo, useState } from 'react';
-import {
-  DEFAULT_CHATBOT_CONFIG,
-  loadChatbotConfig,
-  saveChatbotConfig,
-} from './chatbotConfigStore';
+import { useEffect, useMemo, useState } from 'react';
+import { DEFAULT_CHATBOT_CONFIG, loadChatbotConfig } from './chatbotConfigStore';
+import { loadDashboardConfig, saveDashboardConfig } from './configApi';
+import { useAuth } from '../auth/AuthContext';
 import { Card, Field, PageHeader } from './ui';
 
 const THEMES = ['#6366f1', '#2563eb', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 const MODEL_OPTIONS = ['gpt-4.1-mini', 'gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo'];
 
 export default function ChatbotConfig() {
+  const { getToken } = useAuth();
   const [config, setConfig] = useState(() => loadChatbotConfig());
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [selectedModel, setSelectedModel] = useState(() =>
     MODEL_OPTIONS.includes(config.model) ? config.model : 'custom'
   );
@@ -19,20 +20,52 @@ export default function ChatbotConfig() {
     MODEL_OPTIONS.includes(config.model) ? '' : config.model
   );
 
+  useEffect(() => {
+    let mounted = true;
+
+    async function load() {
+      try {
+        const remoteConfig = await loadDashboardConfig(getToken());
+        if (!mounted) return;
+        setConfig(remoteConfig);
+        setSelectedModel(MODEL_OPTIONS.includes(remoteConfig.model) ? remoteConfig.model : 'custom');
+        setCustomModel(MODEL_OPTIONS.includes(remoteConfig.model) ? '' : remoteConfig.model);
+        setError('');
+      } catch (loadError) {
+        if (!mounted) return;
+        setError(loadError instanceof Error ? loadError.message : 'Failed loading chatbot config');
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    load();
+    return () => { mounted = false; };
+  }, [getToken]);
+
   function update(key, value) {
     setConfig(prev => ({ ...prev, [key]: value }));
     setSaved(false);
   }
 
-  function save() {
-    saveChatbotConfig(config);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  async function save() {
+    try {
+      const savedConfig = await saveDashboardConfig(config, getToken());
+      setConfig(savedConfig);
+      setSaved(true);
+      setError('');
+      setTimeout(() => setSaved(false), 2000);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Failed saving chatbot config');
+    }
   }
 
   function reset() {
     setConfig(DEFAULT_CHATBOT_CONFIG);
+    setSelectedModel(MODEL_OPTIONS.includes(DEFAULT_CHATBOT_CONFIG.model) ? DEFAULT_CHATBOT_CONFIG.model : 'custom');
+    setCustomModel(MODEL_OPTIONS.includes(DEFAULT_CHATBOT_CONFIG.model) ? '' : DEFAULT_CHATBOT_CONFIG.model);
     setSaved(false);
+    setError('');
   }
 
   const snippetCode = useMemo(() => {
@@ -68,6 +101,9 @@ export default function ChatbotConfig() {
         title="Chatbot Configuration"
         subtitle="Configure a real embeddable widget that calls the local chat API through a secure server-side key."
       />
+
+      {loading && <p style={styles.hint}>Loading saved configuration…</p>}
+      {error && <p style={styles.error}>{error}</p>}
 
       <div style={styles.grid}>
         <Card title="Widget Identity">
@@ -301,6 +337,11 @@ function getResolvedApiUrl(apiUrl) {
 }
 
 const styles = {
+  error: {
+    color: '#b91c1c',
+    fontSize: 13,
+    marginBottom: 12,
+  },
   grid: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',

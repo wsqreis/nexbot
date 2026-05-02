@@ -1,30 +1,69 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useAuth } from '../auth/AuthContext';
+import { fetchGtmSettings, persistGtmSettings } from './gtmApi';
 import { Card, Field, PageHeader } from './ui';
 
-const DEFAULT_TAGS = [
-  { id: 1, name: 'NexBot - Widget Loaded', trigger: 'nexbot_widget_loaded', type: 'Custom Event', status: 'active' },
-  { id: 2, name: 'NexBot - Chat Opened', trigger: 'nexbot_opened', type: 'Custom Event', status: 'active' },
-  { id: 3, name: 'NexBot - Message Sent', trigger: 'nexbot_message_sent', type: 'Custom Event', status: 'active' },
-  { id: 4, name: 'NexBot - Conversion', trigger: 'nexbot_message_received', type: 'Conversion', status: 'paused' },
-];
-
 export default function GTMPanel() {
+  const { getToken } = useAuth();
   const [gtmId, setGtmId] = useState('GTM-XXXXXXX');
-  const [tags, setTags] = useState(DEFAULT_TAGS);
+  const [tags, setTags] = useState([]);
   const [log, setLog] = useState([]);
   const [newTag, setNewTag] = useState({ name: '', trigger: '', type: 'Custom Event' });
   const [firing, setFiring] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function load() {
+      try {
+        const settings = await fetchGtmSettings(getToken());
+        if (!mounted) return;
+        setGtmId(settings.gtmId || 'GTM-XXXXXXX');
+        setTags(Array.isArray(settings.tags) ? settings.tags : []);
+        setError('');
+      } catch (loadError) {
+        if (!mounted) return;
+        setError(loadError instanceof Error ? loadError.message : 'Failed loading GTM settings');
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    load();
+    return () => { mounted = false; };
+  }, [getToken]);
+
+  async function saveSettings(nextSettings) {
+    setSaving(true);
+    try {
+      const saved = await persistGtmSettings(nextSettings, getToken());
+      setGtmId(saved.gtmId || 'GTM-XXXXXXX');
+      setTags(Array.isArray(saved.tags) ? saved.tags : []);
+      setError('');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Failed saving GTM settings');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function toggleTag(id) {
-    setTags(prev => prev.map(t =>
-      t.id === id ? { ...t, status: t.status === 'active' ? 'paused' : 'active' } : t
-    ));
+    const nextTags = tags.map(tag =>
+      tag.id === id ? { ...tag, status: tag.status === 'active' ? 'paused' : 'active' } : tag,
+    );
+    setTags(nextTags);
+    saveSettings({ gtmId, tags: nextTags });
   }
 
   function addTag() {
     if (!newTag.name || !newTag.trigger) return;
-    setTags(prev => [...prev, { ...newTag, id: Date.now(), status: 'active' }]);
+    const nextTags = [...tags, { ...newTag, id: Date.now(), status: 'active' }];
+    setTags(nextTags);
     setNewTag({ name: '', trigger: '', type: 'Custom Event' });
+    saveSettings({ gtmId, tags: nextTags });
   }
 
   function fireEvent(tag) {
@@ -33,19 +72,18 @@ export default function GTMPanel() {
       id: Date.now(),
       time: new Date().toLocaleTimeString(),
       event: tag.trigger,
-      status: tag.status === 'active' ? '✅ Fired' : '⏸ Paused',
+      status: tag.status === 'active' ? '✅ Fired locally' : '⏸ Paused locally',
       tag: tag.name,
     };
     setTimeout(() => {
       setLog(prev => [entry, ...prev.slice(0, 19)]);
       setFiring(null);
-      // Push to real dataLayer if GTM is present
       window.dataLayer = window.dataLayer || [];
       window.dataLayer.push({ event: tag.trigger, nexbot: { source: 'dashboard-test' } });
     }, 700);
   }
 
-  const dataLayerCode = `// GTM Container Snippet (in <head>)
+  const dataLayerCode = useMemo(() => `// GTM Container Snippet (in <head>)
 (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
 new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
 j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;
@@ -53,22 +91,29 @@ j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;
 f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${gtmId}');
 
 // NexBot pushes events automatically:
-// window.dataLayer.push({ event: 'nexbot_opened', nexbot: { botId, region } });`;
+// window.dataLayer.push({ event: 'nexbot_opened', nexbot: { botId, region } });`, [gtmId]);
 
   return (
     <div>
-      <PageHeader title="GTM & Tracking" subtitle="Configure Google Tag Manager integration, custom tags, and event triggers." />
+      <PageHeader title="GTM & Tracking" subtitle="Persist GTM configuration for NexBot and test browser-side events locally." />
+
+      {loading && <p style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>Loading GTM settings…</p>}
+      {error && <p style={{ fontSize: 13, color: '#b91c1c', marginBottom: 12 }}>{error}</p>}
 
       <Card title="GTM Container" style={{ marginBottom: 20 }}>
         <Field label="Container ID">
           <input
             style={inp}
             value={gtmId}
-            onChange={e => setGtmId(e.target.value)}
+            onChange={event => setGtmId(event.target.value)}
+            onBlur={() => saveSettings({ gtmId, tags })}
             placeholder="GTM-XXXXXXX"
           />
         </Field>
         <pre style={codeStyle}>{dataLayerCode}</pre>
+        <p style={{ fontSize: 12, color: '#64748b', marginTop: 10 }}>
+          NexBot stores this configuration, but it does not create or publish Google Tag Manager containers remotely.
+        </p>
       </Card>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
@@ -86,6 +131,7 @@ f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${gtmId}
                 <button
                   style={{ ...statusBtn, background: tag.status === 'active' ? '#d1fae5' : '#fee2e2', color: tag.status === 'active' ? '#065f46' : '#991b1b' }}
                   onClick={() => toggleTag(tag.id)}
+                  disabled={saving}
                 >
                   {tag.status}
                 </button>
@@ -99,22 +145,22 @@ f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${gtmId}
           <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 14 }}>
             <p style={{ fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Add Custom Tag</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <input style={inp} placeholder="Tag name" value={newTag.name} onChange={e => setNewTag(p => ({ ...p, name: e.target.value }))} />
-              <input style={inp} placeholder="Event trigger (e.g. nexbot_lead)" value={newTag.trigger} onChange={e => setNewTag(p => ({ ...p, trigger: e.target.value }))} />
-              <select style={inp} value={newTag.type} onChange={e => setNewTag(p => ({ ...p, type: e.target.value }))}>
+              <input style={inp} placeholder="Tag name" value={newTag.name} onChange={event => setNewTag(prev => ({ ...prev, name: event.target.value }))} />
+              <input style={inp} placeholder="Event trigger (e.g. nexbot_lead)" value={newTag.trigger} onChange={event => setNewTag(prev => ({ ...prev, trigger: event.target.value }))} />
+              <select style={inp} value={newTag.type} onChange={event => setNewTag(prev => ({ ...prev, type: event.target.value }))}>
                 <option>Custom Event</option>
                 <option>Conversion</option>
                 <option>Page View</option>
               </select>
-              <button style={addBtn} onClick={addTag}>Add Tag</button>
+              <button style={addBtn} onClick={addTag} disabled={saving}>Add Tag</button>
             </div>
           </div>
         </Card>
 
-        <Card title="Event Log (Live)">
+        <Card title="Local Test Event Log">
           {log.length === 0 && (
             <p style={{ fontSize: 13, color: '#94a3b8', textAlign: 'center', padding: '20px 0' }}>
-              No events yet. Click "Test" on a tag to fire it.
+              No events yet. Click "Test" on a tag to fire it in this browser.
             </p>
           )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

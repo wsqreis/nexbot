@@ -7,6 +7,10 @@ import chatHandler from './api/chat.js';
 import authLogin from './api/auth/login.js';
 import authRegister from './api/auth/register.js';
 import authMe from './api/auth/me.js';
+import dashboardConfigHandler from './api/dashboard/config.js';
+import dashboardRegionsHandler from './api/dashboard/regions.js';
+import dashboardGtmHandler from './api/dashboard/gtm.js';
+import dashboardDeploymentsHandler from './api/dashboard/deployments.js';
 import healthHandler from './api/health.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -21,6 +25,10 @@ const routes = new Map([
   ['/api/auth/login', authLogin],
   ['/api/auth/register', authRegister],
   ['/api/auth/me', authMe],
+  ['/api/dashboard/config', dashboardConfigHandler],
+  ['/api/dashboard/regions', dashboardRegionsHandler],
+  ['/api/dashboard/gtm', dashboardGtmHandler],
+  ['/api/dashboard/deployments', dashboardDeploymentsHandler],
   ['/api/health', healthHandler],
 ]);
 

@@ -15,7 +15,7 @@ Inspired by real-world chatbot products like Boost AI — featuring a zero-depen
 server-side JWT authentication, a real OpenAI backend, Supabase usage tracking,
 Google Tag Manager integration, and multi-region Nordic market support.
 
-> **Note:** Some dashboard panels (Deploy, Regions stats, GTM tag management) are UI demonstrations / proof-of-concept with simulated data. Core features — widget embedding, JWT auth, OpenAI chat API, and GTM `dataLayer` events — are fully functional.
+> **Note:** Dashboard configuration, region settings, GTM settings, deployment requests, and widget preview are now persisted by the app. External GTM publishing and real CI/CD execution still require separate third-party integrations.
 
 ### 🚀 [Live Demo → nexbot-steel.vercel.app](https://nexbot-steel.vercel.app/)
 
@@ -41,11 +41,11 @@ A complete management interface with persistent config, live preview, and real d
 
 | Panel | Description |
 |-------|-------------|
-| **Chatbot Config** | Customize bot name, greeting, model, system prompt, theme — auto-generates embed snippet |
-| **GTM & Tracking** | Custom tags/triggers UI + real `window.dataLayer` event push — tag persistence is a UI demo, not a live GTM container |
-| **Regions** | Nordic region management UI with per-region activation controls — user/session stats are simulated |
-| **Deploy** | Staging → Production deployment flow UI — simulated CI/CD steps and deployment history (proof of concept) |
-| **Live Preview** | Real-time widget preview rendered in an iframe with live config controls |
+| **Chatbot Config** | Customize bot name, greeting, model, system prompt, theme, and API URL — persisted by the app and used by preview/embed generation |
+| **GTM & Tracking** | Persist GTM container ID and custom tag metadata, plus test real browser-side `dataLayer` events |
+| **Regions** | Persist region activation state and greetings, with usage-derived stats when a database-backed usage store is available |
+| **Deploy** | Store deployment requests, approvals, and health-check history without faking external CI/CD execution |
+| **Live Preview** | Real-time widget preview rendered in an iframe using the saved backend-backed configuration |
 
 ### 🔐 Server-Side Authentication
 - **Real JWT** signed with `HMAC-SHA256` via Node.js `crypto` module
