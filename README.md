@@ -50,7 +50,8 @@ A complete management interface with persistent config, live preview, and real d
 ### 🔐 Server-Side Authentication
 - **Real JWT** signed with `HMAC-SHA256` via Node.js `crypto` module
 - Passwords hashed with `SHA-256` before storage
-- Users persisted through one of three backends: Supabase, Postgres via `DATABASE_URL`, or local `data/users.json`
+- Dashboard auth and persisted dashboard state use the app's own JWT flow
+- Users persist through one of three backends: Supabase, Postgres via `DATABASE_URL`, or local `data/users.json`
 - Built-in demo user fallback (`demo@nexbot.io` / `demo1234`)
 - `ALLOW_REGISTRATION=false` flag to lock registration in production
 
@@ -236,6 +237,14 @@ In development and Vite preview, `vite.api.js` forwards `/api/*` requests to the
 | `POST` | `/api/auth/register` | ✗ | Register new user → JWT |
 | `GET` | `/api/auth/me` | ✓ | Verify token, return user info |
 | `POST` | `/api/chat` | ✗ | Send message → OpenAI → AI reply |
+| `GET` | `/api/dashboard/config` | ✓ | Load persisted chatbot configuration |
+| `PUT` | `/api/dashboard/config` | ✓ | Save chatbot configuration |
+| `GET` | `/api/dashboard/regions` | ✓ | Load persisted regions and usage-derived stats |
+| `PUT` | `/api/dashboard/regions` | ✓ | Update one region's persisted settings |
+| `GET` | `/api/dashboard/gtm` | ✓ | Load persisted GTM settings |
+| `PUT` | `/api/dashboard/gtm` | ✓ | Save GTM container ID and tag metadata |
+| `GET` | `/api/dashboard/deployments` | ✓ | Load deployment request history |
+| `POST` | `/api/dashboard/deployments` | ✓ | Create deployment requests, approvals, and health checks |
 | `GET` | `/api/health` | ✗ | Health check + config status |
 
 ### `POST /api/chat` — Request Body
@@ -280,19 +289,22 @@ The widget automatically pushes to `window.dataLayer` on every interaction:
 { event: 'nexbot_closed',           nexbot: { botId, region } }
 ```
 
-Use the **GTM Panel** in the dashboard to create custom tags, map triggers, and fire test events to validate your setup.
+Use the **GTM Panel** in the dashboard to persist your GTM container ID and custom tag metadata, and to fire local browser-side test events to validate your setup. The app does not create or publish GTM containers remotely.
 
 ---
 
 ## 🗄️ Database Usage Tracking *(optional)*
 
-Run the migration to create the tracking table:
+Run the migrations to create the usage, auth, and dashboard persistence tables:
 
 ```bash
 npm run db:migrate
 ```
 
-Or paste `db/migrations/001_create_nexbot_usage.sql` into your Supabase SQL editor.
+Or paste these files into your Supabase SQL editor in order:
+- `db/migrations/001_create_nexbot_usage.sql`
+- `db/migrations/002_create_users.sql`
+- `db/migrations/003_create_dashboard_tables.sql`
 
 Once configured, every `/api/chat` request logs:
 
@@ -346,33 +358,49 @@ nexbot/
 │   │   ├── login.js                 # POST /api/auth/login
 │   │   ├── register.js              # POST /api/auth/register
 │   │   └── me.js                    # GET  /api/auth/me
+│   ├── dashboard/
+│   │   ├── _auth.js                 # Dashboard JWT auth helper
+│   │   ├── config.js                # GET/PUT /api/dashboard/config
+│   │   ├── regions.js               # GET/PUT /api/dashboard/regions
+│   │   ├── gtm.js                   # GET/PUT /api/dashboard/gtm
+│   │   └── deployments.js           # GET/POST /api/dashboard/deployments
 │   ├── authUtils.js                 # JWT sign/verify (HMAC-SHA256), SHA-256 hash
 │   ├── chat.js                      # POST /api/chat → OpenAI /v1/responses
+│   ├── db.js                        # Shared persistence layer for users, usage, and dashboard state
+│   ├── health.js                    # GET /api/health
 │   └── supabase.js                  # Supabase client (optional)
 ├── db/
 │   └── migrations/
-│       └── 001_create_nexbot_usage.sql
+│       ├── 001_create_nexbot_usage.sql
+│       ├── 002_create_users.sql
+│       └── 003_create_dashboard_tables.sql
 ├── public/
 │   └── widget/
-│       └── nexbot.js                # ← Vanilla JS widget v2.0 (zero deps)
+│       └── nexbot.js                # Vanilla JS widget runtime (served path)
 ├── scripts/
 │   └── run-migration.js
 ├── src/
 │   ├── auth/
-│   │   ├── AuthContext.jsx          # Auth state + real API calls
+│   │   ├── AuthContext.jsx          # Dashboard auth state + JWT token access
 │   │   └── LoginPage.jsx            # Login / Register UI
 │   ├── dashboard/
 │   │   ├── Dashboard.jsx            # App shell + sidebar
-│   │   ├── ChatbotConfig.jsx        # Bot config panel
-│   │   ├── chatbotConfigStore.js    # Config persistence (localStorage)
-│   │   ├── GTMPanel.jsx             # Tags, triggers, event log
-│   │   ├── RegionsPanel.jsx         # Nordic region management
-│   │   ├── DeployPanel.jsx          # Staging → Production pipeline
-│   │   ├── LivePreview.jsx          # Real-time iframe widget preview
+│   │   ├── ChatbotConfig.jsx        # Persisted chatbot configuration UI
+│   │   ├── chatbotConfigStore.js    # Local config cache + remote config helpers
+│   │   ├── configApi.js             # Shared config loading/saving client helpers
+│   │   ├── DeployPanel.jsx          # Deployment requests, approvals, and health checks
+│   │   ├── deploymentsApi.js        # Deployment API client helpers
+│   │   ├── GTMPanel.jsx             # Persisted GTM settings + local event testing
+│   │   ├── gtmApi.js                # GTM API client helpers
+│   │   ├── LivePreview.jsx          # Real-time iframe widget preview using saved config
+│   │   ├── RegionsPanel.jsx         # Persisted region management + usage-derived stats
+│   │   ├── regionsApi.js            # Regions API client helpers
 │   │   └── ui.jsx                   # Shared components (Card, Field, PageHeader)
 │   ├── App.jsx                      # Router + protected route guard
 │   ├── main.jsx
 │   └── index.css
+├── nexbot.js                        # Alternate widget runtime copy
+├── server.mjs                       # Production Node server for Docker/self-hosting
 ├── vite.config.js                   # Vite + API plugin
 ├── vite.api.js                      # Dev server API middleware
 ├── .env.example
